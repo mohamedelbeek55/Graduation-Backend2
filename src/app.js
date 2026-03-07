@@ -34,7 +34,7 @@ app.use(cookieParser());
 
 const allowlist = (process.env.FRONTEND_ORIGINS || "")
   .split(",")
-  .map((s) => s.trim())
+  .map((s) => s.trim().replace(/\/$/, ""))
   .filter(Boolean);
 
 app.use(
@@ -53,8 +53,8 @@ app.use(
         }
       }
 
-      // ✅ Allow only specified domains in production
-      if (allowlist.includes(origin)) {
+      const normalizedOrigin = origin.replace(/\/$/, "");
+      if (allowlist.includes(normalizedOrigin)) {
         return callback(null, true);
       }
 
@@ -88,6 +88,14 @@ app.use(morgan("dev"));
 
 app.get("/health", (req, res) => {
   res.json({ ok: true, service: "LexaGuide API" });
+});
+
+app.get("/api/health", (req, res) => {
+  res.json({ ok: true, service: "LexaGuide API" });
+});
+
+app.get("/api", (req, res) => {
+  res.json({ ok: true, base: "/api", info: "LexaGuide API" });
 });
 
 /* ===========================
