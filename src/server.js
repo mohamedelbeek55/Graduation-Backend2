@@ -26,6 +26,13 @@ if (process.env.APP_ENV !== "production") {
   await ensureDB();
 
   app.listen(PORT, () => {
-    console.log(`🚀 LexaGuide API running on http://localhost:${PORT}`);
+    const env = process.env.APP_ENV || "development";
+    const base = process.env.PUBLIC_BASE_URL || `http://127.0.0.1:${PORT}`;
+    const frontend =
+      process.env.PUBLIC_FRONTEND_URL ||
+      (process.env.FRONTEND_ORIGINS || "").split(",")[0]?.trim() ||
+      "https://lexaguide-frontend.vercel.app";
+    console.log(`🚀 LexaGuide API (${env}) listening: ${base}`);
+    console.log(frontend);
   });
 }

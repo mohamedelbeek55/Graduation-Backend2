@@ -6,7 +6,10 @@ import {
   listLawyers,
   listPendingLawyers,
   verifyLawyer,
-  setLawyerActive
+  setLawyerActive,
+  createLawyerAdmin,
+  updateLawyerAdmin,
+  deleteLawyerAdmin
 } from "./lawyers.controller.js";
 
 const router = Router();
@@ -22,5 +25,8 @@ router.get("/", listLawyers);
 router.get("/pending", requireAuth, requireRole("admin"), listPendingLawyers);
 router.patch("/:id/verify", requireAuth, requireRole("admin"), verifyLawyer);
 router.patch("/:id/active", requireAuth, requireRole("admin"), setLawyerActive);
+router.post("/", requireAuth, requireRole("admin"), createLawyerAdmin);
+router.patch("/:id", requireAuth, requireRole("admin"), updateLawyerAdmin);
+router.delete("/:id", requireAuth, requireRole("admin"), deleteLawyerAdmin);
 
 export default router;
