@@ -7,5 +7,6 @@ export async function connectDB() {
 
   mongoose.set("strictQuery", true);
   await mongoose.connect(uri);
-  console.log("✅ MongoDB connected");
+  const isAtlas = /mongodb\.net/i.test(uri);
+  console.log(isAtlas ? "✅ Atlas connected" : "✅ MongoDB connected");
 }
