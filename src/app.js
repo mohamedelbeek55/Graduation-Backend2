@@ -54,7 +54,10 @@ app.use(
       }
 
       const normalizedOrigin = origin.replace(/\/$/, "");
-      if (allowlist.includes(normalizedOrigin)) {
+      if (
+        allowlist.includes(normalizedOrigin) ||
+        normalizedOrigin.endsWith(".vercel.app")
+      ) {
         return callback(null, true);
       }
 
@@ -87,11 +90,13 @@ app.use(morgan("dev"));
 =========================== */
 
 app.get("/health", (req, res) => {
-  res.json({ ok: true, service: "LexaGuide API" });
+  const dbStatus = mongoose.connection.readyState === 1 ? "connected" : "disconnected";
+  res.json({ ok: true, service: "LexaGuide API", database: dbStatus });
 });
 
 app.get("/api/health", (req, res) => {
-  res.json({ ok: true, service: "LexaGuide API" });
+  const dbStatus = mongoose.connection.readyState === 1 ? "connected" : "disconnected";
+  res.json({ ok: true, service: "LexaGuide API", database: dbStatus });
 });
 
 app.get("/api", (req, res) => {
