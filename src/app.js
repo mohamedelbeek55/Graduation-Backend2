@@ -96,8 +96,15 @@ app.get("/health", (req, res) => {
 });
 
 app.get("/api/health", (req, res) => {
-  const dbStatus = mongoose.connection.readyState === 1 ? "connected" : "disconnected";
-  res.json({ ok: true, service: "LexaGuide API", database: dbStatus });
+  const readyState = mongoose.connection.readyState;
+  const states = ["disconnected", "connected", "connecting", "disconnecting"];
+  res.json({
+    ok: true,
+    service: "LexaGuide API",
+    database: states[readyState] || "unknown",
+    readyState: readyState,
+    uriSet: !!process.env.MONGODB_URI
+  });
 });
 
 app.get("/api", (req, res) => {

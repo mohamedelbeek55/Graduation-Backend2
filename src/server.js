@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import mongoose from "mongoose";
 dotenv.config();
 
 import app from "./app.js";
@@ -7,9 +8,13 @@ import { connectDB } from "./config/db.js";
 let isConnected = false;
 
 async function ensureDB() {
-  if (!isConnected) {
+  if (mongoose.connection.readyState >= 1) {
+    return;
+  }
+  try {
     await connectDB();
-    isConnected = true;
+  } catch (err) {
+    console.error("❌ DB connection failed:", err.message);
   }
 }
 
