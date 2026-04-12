@@ -11,6 +11,7 @@ const lawyerSchema = new mongoose.Schema(
 
     bio: { type: String, default: "" },
     governorate: { type: String, default: "" }, // محافظة
+    city: { type: String, default: "" }, // مدينة (للمطابقة الدقيقة في الـ AI)
     address: { type: String, default: "" },
 
     specialties: [{ type: String }], // ["أحوال شخصية", "مدني", ...]
@@ -18,9 +19,11 @@ const lawyerSchema = new mongoose.Schema(
 
     ratingAvg: { type: Number, default: 0 }, // هنحسبها من reviews
     ratingCount: { type: Number, default: 0 },
+    successRate: { type: Number, default: 0 }, // نسبة النجاح (للمطابقة الذكية)
 
     isVerified: { type: Boolean, default: false }, // موافقة الأدمن
-    isActive: { type: Boolean, default: true } // تعطيل/حظر
+    isActive: { type: Boolean, default: true }, // تعطيل/حظر
+    isAvailable: { type: Boolean, default: true } // متاح حالياً للترشيح
   },
   { timestamps: true }
 );

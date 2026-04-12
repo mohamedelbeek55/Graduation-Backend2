@@ -28,10 +28,12 @@ async function main() {
     });
     console.log("✅ Admin created:", user.email);
   } else {
+    const passwordHash = await bcrypt.hash(password, 10);
+    user.passwordHash = passwordHash;
     user.role = "admin";
     user.isActive = true;
     await user.save();
-    console.log("✅ User promoted to admin:", user.email);
+    console.log("✅ Admin updated (password & role):", user.email);
   }
 
   process.exit(0);

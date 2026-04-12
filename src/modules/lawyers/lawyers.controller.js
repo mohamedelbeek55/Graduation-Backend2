@@ -150,12 +150,15 @@ const adminCreateSchema = z.object({
   phone: z.string().optional(),
   bio: z.string().optional(),
   governorate: z.string().optional(),
+  city: z.string().optional(),
   address: z.string().optional(),
   specialties: z.array(z.string()).optional(),
   pricePerSession: z.number().optional(),
+  successRate: z.number().min(0).max(100).optional(),
   password: z.string().min(6).optional(),
   isVerified: z.boolean().optional(),
-  isActive: z.boolean().optional()
+  isActive: z.boolean().optional(),
+  isAvailable: z.boolean().optional()
 });
 
 export const createLawyerAdmin = asyncHandler(async (req, res) => {
@@ -174,11 +177,14 @@ export const createLawyerAdmin = asyncHandler(async (req, res) => {
     passwordHash,
     bio: data.bio || "",
     governorate: data.governorate || "",
+    city: data.city || "",
     address: data.address || "",
     specialties: data.specialties || [],
     pricePerSession: data.pricePerSession || 0,
+    successRate: data.successRate || 0,
     isVerified: data.isVerified ?? false,
-    isActive: data.isActive ?? true
+    isActive: data.isActive ?? true,
+    isAvailable: data.isAvailable ?? true
   });
 
   res.status(201).json({
@@ -197,11 +203,14 @@ const adminUpdateSchema = z.object({
   phone: z.string().optional(),
   bio: z.string().optional(),
   governorate: z.string().optional(),
+  city: z.string().optional(),
   address: z.string().optional(),
   specialties: z.array(z.string()).optional(),
   pricePerSession: z.number().optional(),
+  successRate: z.number().min(0).max(100).optional(),
   isVerified: z.boolean().optional(),
-  isActive: z.boolean().optional()
+  isActive: z.boolean().optional(),
+  isAvailable: z.boolean().optional()
 });
 
 export const updateLawyerAdmin = asyncHandler(async (req, res) => {
@@ -219,4 +228,60 @@ export const deleteLawyerAdmin = asyncHandler(async (req, res) => {
   const deleted = await Lawyer.findByIdAndDelete(req.params.id);
   if (!deleted) return res.status(404).json({ message: "Not found" });
   res.json({ ok: true });
+});
+
+// ✅ AI Proxy: Recommend Lawyers via FastAPI
+export const recommendLawyersAI = asyncHandler(async (req, res) => {
+  const { case_type, city, budget, consultation_type } = req.body;
+
+  // 1) Try to fetch from FastAPI Microservice
+  const AI_URL = process.env.AI_SERVICE_URL || "http://127.0.0.1:8000";
+
+  try {
+    const response = await fetch(`${AI_URL}/recommend-lawyers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        case_type,
+        city,
+        budget: Number(budget) || 1000,
+        consultation_type: consultation_type || "chat"
+      })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return res.json({ lawyers: data });
+    }
+  } catch (err) {
+    console.warn("AI Microservice offline, falling back to basic DB search");
+  }
+
+  // 2) Fallback to basic MongoDB search if AI service is down
+  const filter = {
+    isActive: true,
+    isVerified: true,
+    specialties: case_type
+  };
+
+  const lawyers = await Lawyer.find(filter)
+    .select("fullName bio governorate city specialties pricePerSession successRate ratingAvg ratingCount")
+    .sort({ ratingAvg: -1 })
+    .limit(10);
+
+  // Map to match AI response schema for frontend consistency
+  const mapped = lawyers.map(l => ({
+    id: l._id,
+    full_name: l.fullName,
+    specialization: l.specialties[0] || "",
+    city: l.city || l.governorate,
+    price: l.pricePerSession,
+    avg_rating: l.ratingAvg,
+    reviews_count: l.ratingCount,
+    success_rate: l.successRate || 0,
+    is_verified: l.isVerified,
+    score: l.ratingAvg / 5 // basic score
+  }));
+
+  res.json({ lawyers: mapped });
 });

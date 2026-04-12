@@ -43,24 +43,29 @@ export const myConsultations = asyncHandler(async (req, res) => {
 });
 
 /**
- * Update status (Admin for now)
+ * Update status (Admin or Lawyer owner)
  */
 const statusSchema = z.object({
-  status: z.enum(["pending", "accepted", "closed", "canceled"])
+  status: z.enum(["pending", "accepted", "closed", "canceled", "active", "confirmed", "declined"])
 });
 
 export const updateStatus = asyncHandler(async (req, res) => {
   const data = statusSchema.parse(req.body);
+  const consultation = await Consultation.findById(req.params.id);
+  if (!consultation) return res.status(404).json({ message: "Not found" });
 
-  const updated = await Consultation.findByIdAndUpdate(
-    req.params.id,
-    { status: data.status },
-    { new: true }
-  );
+  // Allow if admin OR if lawyer owner
+  const isAdmin = req.user && req.user.role === "admin";
+  const isLawyerOwner = req.lawyer && String(consultation.lawyerId) === String(req.lawyer._id);
 
-  if (!updated) return res.status(404).json({ message: "Not found" });
+  if (!isAdmin && !isLawyerOwner) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
 
-  res.json({ consultation: updated });
+  consultation.status = data.status;
+  await consultation.save();
+
+  res.json({ consultation });
 });
 
 /**
@@ -71,23 +76,38 @@ const sendSchema = z.object({
 });
 
 /**
- * Send message as User
+ * Unified send message (User or Lawyer)
  */
-export const sendMessageAsUser = asyncHandler(async (req, res) => {
+export const sendMessage = asyncHandler(async (req, res) => {
   const data = sendSchema.parse(req.body);
-
   const consultation = await Consultation.findById(req.params.id);
   if (!consultation) return res.status(404).json({ message: "Not found" });
 
-  // user must own the consultation
-  if (String(consultation.userId) !== String(req.user.sub)) {
-    return res.status(403).json({ message: "Forbidden" });
+  let senderType = "";
+  let senderId = "";
+
+  if (req.user) {
+    // Check if user owns it
+    if (String(consultation.userId) !== String(req.user.sub)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    senderType = "user";
+    senderId = req.user.sub;
+  } else if (req.lawyer) {
+    // Check if lawyer owns it
+    if (String(consultation.lawyerId) !== String(req.lawyer._id)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    senderType = "lawyer";
+    senderId = req.lawyer._id;
+  } else {
+    return res.status(401).json({ message: "Unauthorized" });
   }
 
   const msg = await ConsultationMessage.create({
     consultationId: consultation._id,
-    senderType: "user",
-    senderId: req.user.sub,
+    senderType,
+    senderId,
     message: data.message
   });
 
@@ -95,13 +115,17 @@ export const sendMessageAsUser = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get messages as User
+ * Unified get messages (User or Lawyer)
  */
-export const getMessagesAsUser = asyncHandler(async (req, res) => {
+export const getMessages = asyncHandler(async (req, res) => {
   const consultation = await Consultation.findById(req.params.id);
   if (!consultation) return res.status(404).json({ message: "Not found" });
 
-  if (String(consultation.userId) !== String(req.user.sub)) {
+  const isUserOwner = req.user && String(consultation.userId) === String(req.user.sub);
+  const isLawyerOwner = req.lawyer && String(consultation.lawyerId) === String(req.lawyer._id);
+  const isAdmin = req.user && req.user.role === "admin";
+
+  if (!isUserOwner && !isLawyerOwner && !isAdmin) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
@@ -122,46 +146,4 @@ export const myConsultationsAsLawyer = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 });
 
   res.json({ consultations: items });
-});
-
-/**
- * Send message as Lawyer
- */
-export const sendMessageAsLawyer = asyncHandler(async (req, res) => {
-  const data = sendSchema.parse(req.body);
-
-  const consultation = await Consultation.findById(req.params.id);
-  if (!consultation) return res.status(404).json({ message: "Not found" });
-
-  // lawyer must own the consultation
-  if (String(consultation.lawyerId) !== String(req.lawyer._id)) {
-    return res.status(403).json({ message: "Forbidden" });
-  }
-
-  const msg = await ConsultationMessage.create({
-    consultationId: consultation._id,
-    senderType: "lawyer",
-    senderId: req.lawyer._id,
-    message: data.message
-  });
-
-  res.status(201).json({ message: msg });
-});
-
-/**
- * Get messages as Lawyer
- */
-export const getMessagesAsLawyer = asyncHandler(async (req, res) => {
-  const consultation = await Consultation.findById(req.params.id);
-  if (!consultation) return res.status(404).json({ message: "Not found" });
-
-  if (String(consultation.lawyerId) !== String(req.lawyer._id)) {
-    return res.status(403).json({ message: "Forbidden" });
-  }
-
-  const messages = await ConsultationMessage.find({
-    consultationId: consultation._id
-  }).sort({ createdAt: 1 });
-
-  res.json({ messages });
 });
