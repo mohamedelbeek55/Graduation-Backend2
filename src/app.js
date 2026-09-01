@@ -16,6 +16,9 @@ import generatedRoutes from "./modules/generated/generated.routes.js";
 import chatbotRoutes from "./modules/chatbot/chatbot.routes.js";
 import profileRoutes from "./modules/profile/profile.routes.js";
 import adminRoutes from "./modules/admin/admin.routes.js";
+import notificationRoutes from "./modules/users/notifications.routes.js";
+import documentsRoutes from "./modules/documents/documents.routes.js";
+import contactRoutes from "./modules/contact/contact.routes.js";
 
 import { errorMiddleware } from "./middlewares/error.middleware.js";
 
@@ -121,10 +124,14 @@ app.use("/api/procedures", proceduresRoutes);
 app.use("/api/templates", templatesRoutes);
 app.use("/api/lawyers", lawyersRoutes);
 app.use("/api/consultations", consultationsRoutes);
+app.use("/api/bookings", consultationsRoutes); // Alias for consultations
 app.use("/api/generated", generatedRoutes);
 app.use("/api/chatbot", chatbotRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/documents", documentsRoutes);
+app.use("/api/contact", contactRoutes);
 
 /* ===========================
    Error Handler (Always Last)

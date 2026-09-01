@@ -3,6 +3,8 @@ import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { Lawyer } from "./lawyer.model.js";
+import { Consultation } from "../consultations/consultation.model.js";
+import { ConsultationMessage } from "../consultations/message.model.js";
 
 const registerLawyerSchema = z.object({
   fullName: z.string().min(2),
@@ -31,8 +33,12 @@ function signLawyerToken({ sub }) {
 export const registerLawyer = asyncHandler(async (req, res) => {
   const data = registerLawyerSchema.parse(req.body);
 
-  const exists = await Lawyer.findOne({ email: data.email });
-  if (exists) return res.status(409).json({ message: "Email already exists" });
+  // ✅ Check both collections for email existence
+  const userExists = await User.findOne({ email: data.email });
+  const lawyerExists = await Lawyer.findOne({ email: data.email });
+  if (userExists || lawyerExists) {
+    return res.status(409).json({ message: "Email already exists in our system" });
+  }
 
   const passwordHash = await bcrypt.hash(data.password, 10);
 
@@ -81,11 +87,17 @@ export const loginLawyer = asyncHandler(async (req, res) => {
   });
 });
 
-// ✅ Public list/search lawyers (للمستخدمين)
+// ✅ Public list/search lawyers (للمستخدمين وللأدمن)
 export const listLawyers = asyncHandler(async (req, res) => {
-  const { q, governorate, specialty } = req.query;
+  const { q, governorate, specialty, all } = req.query;
 
-  const filter = { isActive: true, isVerified: true };
+  // للأدمن، نعرض الكل. للمستخدمين، نعرض فقط النشطين والموثقين.
+  // Security Fix: only allow 'all=true' if the user is an admin
+  let filter = { isActive: true, isVerified: true };
+  
+  if (all === "true" && req.user && req.user.role === "admin") {
+    filter = {};
+  }
 
   if (governorate) filter.governorate = String(governorate);
   if (specialty) filter.specialties = String(specialty);
@@ -97,9 +109,9 @@ export const listLawyers = asyncHandler(async (req, res) => {
   }
 
   const lawyers = await query
-    .select("fullName bio governorate specialties pricePerSession ratingAvg ratingCount")
-    .sort({ ratingAvg: -1 })
-    .limit(50);
+    .select("fullName email bio governorate specialties pricePerSession ratingAvg ratingCount isVerified isActive")
+    .sort({ createdAt: -1 })
+    .limit(100);
 
   res.json({ lawyers });
 });
@@ -154,6 +166,9 @@ const adminCreateSchema = z.object({
   address: z.string().optional(),
   specialties: z.array(z.string()).optional(),
   pricePerSession: z.number().optional(),
+  sessionDurationMins: z.number().optional(),
+  communicationMethods: z.string().optional(),
+  availabilityStatus: z.string().optional(),
   successRate: z.number().min(0).max(100).optional(),
   password: z.string().min(6).optional(),
   isVerified: z.boolean().optional(),
@@ -181,10 +196,12 @@ export const createLawyerAdmin = asyncHandler(async (req, res) => {
     address: data.address || "",
     specialties: data.specialties || [],
     pricePerSession: data.pricePerSession || 0,
+    sessionDurationMins: data.sessionDurationMins || 30,
+    communicationMethods: data.communicationMethods || "both",
     successRate: data.successRate || 0,
-    isVerified: data.isVerified ?? false,
+    isVerified: data.isVerified ?? true,
     isActive: data.isActive ?? true,
-    isAvailable: data.isAvailable ?? true
+    isAvailable: data.isAvailable ?? (data.availabilityStatus !== "unavailable")
   });
 
   res.status(201).json({
@@ -207,6 +224,9 @@ const adminUpdateSchema = z.object({
   address: z.string().optional(),
   specialties: z.array(z.string()).optional(),
   pricePerSession: z.number().optional(),
+  sessionDurationMins: z.number().optional(),
+  communicationMethods: z.string().optional(),
+  availabilityStatus: z.string().optional(),
   successRate: z.number().min(0).max(100).optional(),
   isVerified: z.boolean().optional(),
   isActive: z.boolean().optional(),
@@ -215,6 +235,11 @@ const adminUpdateSchema = z.object({
 
 export const updateLawyerAdmin = asyncHandler(async (req, res) => {
   const data = adminUpdateSchema.parse(req.body);
+
+  // Map availabilityStatus to isAvailable if provided
+  if (data.availabilityStatus) {
+    data.isAvailable = data.availabilityStatus !== "unavailable";
+  }
 
   const updated = await Lawyer.findByIdAndUpdate(req.params.id, data, {
     new: true
@@ -225,8 +250,20 @@ export const updateLawyerAdmin = asyncHandler(async (req, res) => {
 });
 
 export const deleteLawyerAdmin = asyncHandler(async (req, res) => {
-  const deleted = await Lawyer.findByIdAndDelete(req.params.id);
+  const lawyerId = req.params.id;
+  const deleted = await Lawyer.findByIdAndDelete(lawyerId);
   if (!deleted) return res.status(404).json({ message: "Not found" });
+
+  // Cleanup: Find all consultations for this lawyer
+  const consultations = await Consultation.find({ lawyerId });
+  const consultationIds = consultations.map(c => c._id);
+
+  // Delete messages and consultations
+  if (consultationIds.length > 0) {
+    await ConsultationMessage.deleteMany({ consultationId: { $in: consultationIds } });
+    await Consultation.deleteMany({ lawyerId });
+  }
+
   res.json({ ok: true });
 });
 
@@ -271,17 +308,26 @@ export const recommendLawyersAI = asyncHandler(async (req, res) => {
 
   // Map to match AI response schema for frontend consistency
   const mapped = lawyers.map(l => ({
-    id: l._id,
+    id: l._id.toString(),
     full_name: l.fullName,
-    specialization: l.specialties[0] || "",
-    city: l.city || l.governorate,
-    price: l.pricePerSession,
-    avg_rating: l.ratingAvg,
-    reviews_count: l.ratingCount,
+    specialization: l.specialties?.[0] || "",
+    city: l.city || l.governorate || "",
+    price: l.pricePerSession || 0,
+    avg_rating: l.ratingAvg || 0,
+    reviews_count: l.ratingCount || 0,
     success_rate: l.successRate || 0,
-    is_verified: l.isVerified,
-    score: l.ratingAvg / 5 // basic score
+    is_verified: true, // Known from filter
+    score: (l.ratingAvg || 0) / 5
   }));
 
   res.json({ lawyers: mapped });
+});
+
+// ✅ Get single lawyer by ID
+export const getLawyerById = asyncHandler(async (req, res) => {
+  const lawyer = await Lawyer.findById(req.params.id)
+    .select("fullName bio governorate specialties pricePerSession ratingAvg ratingCount isVerified isActive");
+
+  if (!lawyer) return res.status(404).json({ message: "Lawyer not found" });
+  res.json({ lawyer });
 });

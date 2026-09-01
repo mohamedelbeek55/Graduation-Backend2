@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAuth, requireRole } from "../../middlewares/auth.middleware.js";
+import { requireAuth, requireRole, requireUserOrLawyer } from "../../middlewares/auth.middleware.js";
 import { requireLawyerAuth } from "../../middlewares/lawyerAuth.middleware.js";
 
 import {
@@ -16,39 +16,18 @@ const router = Router();
 /**
  * COMMON (Both User and Lawyer can use these)
  */
-router.get("/:id/messages", (req, res, next) => {
-  // Try User Auth first, then Lawyer Auth
-  requireAuth(req, res, (err) => {
-    if (!err) return getMessages(req, res, next);
-    requireLawyerAuth(req, res, (err2) => {
-      if (!err2) return getMessages(req, res, next);
-      return res.status(401).json({ message: "Unauthorized" });
-    });
-  });
-});
-
-router.post("/:id/messages", (req, res, next) => {
-  requireAuth(req, res, (err) => {
-    if (!err) return sendMessage(req, res, next);
-    requireLawyerAuth(req, res, (err2) => {
-      if (!err2) return sendMessage(req, res, next);
-      return res.status(401).json({ message: "Unauthorized" });
-    });
-  });
-});
+router.get("/:id/messages", requireUserOrLawyer, getMessages);
+router.post("/:id/messages", requireUserOrLawyer, sendMessage);
 
 /**
  * STATUS (Admin or Lawyer owner)
  */
-router.patch("/:id/status", (req, res, next) => {
-  requireAuth(req, res, (err) => {
-    if (!err) return updateStatus(req, res, next);
-    requireLawyerAuth(req, res, (err2) => {
-      if (!err2) return updateStatus(req, res, next);
-      return res.status(401).json({ message: "Unauthorized" });
-    });
-  });
-});
+router.patch("/:id/status", requireUserOrLawyer, updateStatus);
+
+/**
+ * PUT /api/bookings/:id - Alias or direct for status update as requested
+ */
+router.put("/:id", requireUserOrLawyer, updateStatus);
 
 /**
  * USER

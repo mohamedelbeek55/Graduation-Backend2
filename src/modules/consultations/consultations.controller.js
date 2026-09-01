@@ -3,13 +3,15 @@ import { asyncHandler } from "../../utils/asyncHandler.js";
 import { Consultation } from "./consultation.model.js";
 import { ConsultationMessage } from "./message.model.js";
 import { Lawyer } from "../lawyers/lawyer.model.js";
+import { Notification } from "../users/notification.model.js";
 
 /**
  * Create Consultation (User)
  */
 const createSchema = z.object({
   lawyerId: z.string().min(1),
-  notes: z.string().optional()
+  notes: z.string().optional(),
+  type: z.enum(["chat", "video"]).optional().default("chat")
 });
 
 export const createConsultation = asyncHandler(async (req, res) => {
@@ -23,7 +25,7 @@ export const createConsultation = asyncHandler(async (req, res) => {
   const c = await Consultation.create({
     userId: req.user.sub,
     lawyerId: data.lawyerId,
-    type: "chat",
+    type: data.type,
     status: "pending",
     notes: data.notes || ""
   });
@@ -39,14 +41,26 @@ export const myConsultations = asyncHandler(async (req, res) => {
     .populate("lawyerId", "fullName governorate specialties ratingAvg pricePerSession")
     .sort({ createdAt: -1 });
 
-  res.json({ consultations: items });
+  const consultations = items.map(c => ({
+    _id: c._id,
+    id: c._id,
+    lawyer_name: c.lawyerId ? c.lawyerId.fullName : "Expert",
+    legal_area: c.lawyerId && c.lawyerId.specialties ? c.lawyerId.specialties[0] : "Legal Expert",
+    status: c.status,
+    type: c.type,
+    description: c.notes,
+    created_at: c.createdAt,
+    lawyerId: c.lawyerId
+  }));
+
+  res.json({ consultations, data: consultations });
 });
 
 /**
  * Update status (Admin or Lawyer owner)
  */
 const statusSchema = z.object({
-  status: z.enum(["pending", "accepted", "closed", "canceled", "active", "confirmed", "declined"])
+  status: z.enum(["pending", "accepted", "closed", "canceled", "active", "confirmed", "declined", "completed"])
 });
 
 export const updateStatus = asyncHandler(async (req, res) => {
@@ -59,11 +73,28 @@ export const updateStatus = asyncHandler(async (req, res) => {
   const isLawyerOwner = req.lawyer && String(consultation.lawyerId) === String(req.lawyer._id);
 
   if (!isAdmin && !isLawyerOwner) {
+    console.warn("Forbidden Access Details:", {
+      authRole: req.user ? req.user.role : "no_user",
+      authUserId: req.user ? req.user.sub : "no_user",
+      authLawyerId: req.lawyer ? req.lawyer._id : "no_lawyer",
+      consultationLawyerId: consultation.lawyerId
+    });
     return res.status(403).json({ message: "Forbidden" });
   }
 
   consultation.status = data.status;
   await consultation.save();
+
+  // Create notification for user if accepted
+  if (data.status === "accepted" || data.status === "active") {
+    const lawyer = await Lawyer.findById(consultation.lawyerId);
+    await Notification.create({
+      userId: consultation.userId,
+      message: `Your consultation with Lawyer ${lawyer ? lawyer.fullName : "Expert"} has been accepted!`,
+      type: "booking_accepted",
+      link: "/html/user-consultations.html"
+    }).catch(err => console.error("Notification failed:", err));
+  }
 
   res.json({ consultation });
 });
@@ -111,6 +142,20 @@ export const sendMessage = asyncHandler(async (req, res) => {
     message: data.message
   });
 
+  // Create notification for recipient
+  if (senderType === "lawyer") {
+    // Notify user about lawyer message
+    await Notification.create({
+      userId: consultation.userId,
+      message: `New message from Lawyer ${req.lawyer.fullName}`,
+      type: "new_message",
+      link: "/html/user-consultations.html"
+    }).catch(err => console.error("Notification failed:", err));
+  } else if (senderType === "user") {
+    // Optionally notify lawyer (if we want lawyer notifications too)
+    // For now, task only asked for user notifications
+  }
+
   res.status(201).json({ message: msg });
 });
 
@@ -133,7 +178,22 @@ export const getMessages = asyncHandler(async (req, res) => {
     consultationId: consultation._id
   }).sort({ createdAt: 1 });
 
-  res.json({ messages });
+  // Add the initial notes as the first message if present
+  const allMessages = [];
+  if (consultation.notes) {
+    allMessages.push({
+      _id: "initial-note",
+      consultationId: consultation._id,
+      senderType: "user",
+      senderId: consultation.userId,
+      message: consultation.notes,
+      createdAt: consultation.createdAt,
+      isInitial: true
+    });
+  }
+  allMessages.push(...messages);
+
+  res.json({ messages: allMessages });
 });
 
 /**

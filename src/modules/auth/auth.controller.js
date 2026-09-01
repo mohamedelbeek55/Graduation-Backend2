@@ -4,6 +4,7 @@ import z from "zod";
 import crypto from "crypto";
 
 import { User } from "../users/user.model.js";
+import { Lawyer } from "../lawyers/lawyer.model.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 
 import {
@@ -59,8 +60,12 @@ function signAccessToken({ sub, role }) {
 export const register = asyncHandler(async (req, res) => {
   const data = registerSchema.parse(req.body);
 
-  const exists = await User.findOne({ email: data.email });
-  if (exists) return res.status(409).json({ message: "Email already exists" });
+  // ✅ Check both collections for email existence
+  const userExists = await User.findOne({ email: data.email });
+  const lawyerExists = await Lawyer.findOne({ email: data.email });
+  if (userExists || lawyerExists) {
+    return res.status(409).json({ message: "Email already exists in our system" });
+  }
 
   const passwordHash = await bcrypt.hash(data.password, 10);
 
@@ -101,42 +106,56 @@ export const register = asyncHandler(async (req, res) => {
 export const login = asyncHandler(async (req, res) => {
   const data = loginSchema.parse(req.body);
 
-  const user = await User.findOne({ email: data.email });
-  if (!user) return res.status(401).json({ message: "Invalid credentials" });
+  // 1. Try User
+  let account = await User.findOne({ email: data.email });
+  let isLawyer = false;
+
+  // 2. Try Lawyer if not found in User
+  if (!account) {
+    account = await Lawyer.findOne({ email: data.email });
+    if (account) isLawyer = true;
+  }
+
+  if (!account) return res.status(401).json({ message: "Invalid credentials" });
 
   // ✅ block disabled accounts
-  if (user.isActive === false) {
+  if (account.isActive === false) {
     return res.status(403).json({ message: "Account disabled" });
   }
 
-  const ok = await bcrypt.compare(data.password, user.passwordHash);
-  if (!ok) return res.status(401).json({ message: "Invalid credentials" });
-
-  const accessToken = signAccessToken({ sub: user._id.toString(), role: user.role });
-
-  const jti = newJti();
-  const refreshToken = signRefreshToken({ sub: user._id.toString(), jti });
-
-  user.refreshTokens = user.refreshTokens || [];
-  user.refreshTokens.push({
-    tokenHash: hashToken(refreshToken),
-    jti,
-    expiresAt: refreshExpiresAt(),
-    userAgent: req.headers["user-agent"] || "",
-    ip: req.ip || ""
-  });
-
-  // keep last 10 sessions
-  if (user.refreshTokens.length > 10) {
-    user.refreshTokens = user.refreshTokens.slice(user.refreshTokens.length - 10);
+  // ✅ for lawyers, check verification (bypass for Admin-created lawyers now default to true)
+  if (isLawyer && account.isVerified === false) {
+    return res.status(403).json({ message: "Lawyer account not verified by admin yet" });
   }
 
-  await user.save();
+  const ok = await bcrypt.compare(data.password, account.passwordHash);
+  if (!ok) return res.status(401).json({ message: "Invalid credentials" });
+
+  const accessToken = signAccessToken({ sub: account._id.toString(), role: account.role });
+
+  const jti = newJti();
+  const refreshToken = signRefreshToken({ sub: account._id.toString(), jti });
+
+  if (!isLawyer) {
+    // Standard User refresh token logic
+    account.refreshTokens = account.refreshTokens || [];
+    account.refreshTokens.push({
+      tokenHash: hashToken(refreshToken),
+      jti,
+      expiresAt: refreshExpiresAt(),
+      userAgent: req.headers["user-agent"] || "",
+      ip: req.ip || ""
+    });
+    if (account.refreshTokens.length > 10) {
+      account.refreshTokens = account.refreshTokens.slice(account.refreshTokens.length - 10);
+    }
+    await account.save();
+  }
 
   setRefreshCookie(res, refreshToken);
 
   return res.json({
-    user: { id: user._id, fullName: user.fullName, email: user.email, role: user.role },
+    user: { id: account._id, fullName: account.fullName, email: account.email, role: account.role },
     accessToken,
     refreshToken
   });
@@ -304,8 +323,19 @@ export const resetPassword = asyncHandler(async (req, res) => {
 });
 
 export const me = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user.sub).select(
+  // Try User first
+  let account = await User.findById(req.user.sub).select(
     "fullName email role isActive createdAt"
   );
-  return res.json({ user });
+
+  // If not found in User, try Lawyer (lawyer tokens also use /auth/login)
+  if (!account) {
+    account = await Lawyer.findById(req.user.sub).select(
+      "fullName email role isActive isVerified createdAt"
+    );
+  }
+
+  if (!account) return res.status(404).json({ message: "Account not found" });
+
+  return res.json({ user: account });
 });

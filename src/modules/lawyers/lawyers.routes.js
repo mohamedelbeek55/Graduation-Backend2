@@ -10,26 +10,28 @@ import {
   createLawyerAdmin,
   updateLawyerAdmin,
   deleteLawyerAdmin,
-  recommendLawyersAI
+  recommendLawyersAI,
+  getLawyerById
 } from "./lawyers.controller.js";
 
 const router = Router();
 
-// Lawyer auth
+// ─── Auth ────────────────────────────────────────────────────────────────────
 router.post("/register", registerLawyer);
 router.post("/login", loginLawyer);
 
-// Public list/search
-router.get("/", listLawyers);
-
-// Admin dashboard
+// ─── Static paths FIRST (must come before /:id to avoid shadowing) ───────────
 router.get("/pending", requireAuth, requireRole("admin"), listPendingLawyers);
-router.patch("/:id/verify", requireAuth, requireRole("admin"), verifyLawyer);
-router.patch("/:id/active", requireAuth, requireRole("admin"), setLawyerActive);
-
 router.post("/recommend", recommendLawyersAI);
 
+// ─── Public list ─────────────────────────────────────────────────────────────
+router.get("/", listLawyers);
 router.post("/", requireAuth, requireRole("admin"), createLawyerAdmin);
+
+// ─── Parameterised routes last ────────────────────────────────────────────────
+router.get("/:id", getLawyerById);
+router.patch("/:id/verify", requireAuth, requireRole("admin"), verifyLawyer);
+router.patch("/:id/active", requireAuth, requireRole("admin"), setLawyerActive);
 router.patch("/:id", requireAuth, requireRole("admin"), updateLawyerAdmin);
 router.delete("/:id", requireAuth, requireRole("admin"), deleteLawyerAdmin);
 

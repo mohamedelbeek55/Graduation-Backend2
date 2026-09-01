@@ -2,6 +2,7 @@ import z from "zod";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ChatSession } from "./chatSession.model.js";
 import { ChatMessage } from "./chatMessage.model.js";
+import { Procedure } from "../procedures/procedure.model.js";
 
 // Create session
 const createSessionSchema = z.object({
@@ -54,7 +55,7 @@ export const getSession = asyncHandler(async (req, res) => {
   res.json({ session, messages });
 });
 
-// Send message (User) + placeholder assistant response
+// Send message (User) + Smarter assistant response
 const sendSchema = z.object({
   content: z.string().min(1)
 });
@@ -77,9 +78,32 @@ export const sendMessage = asyncHandler(async (req, res) => {
     content: data.content
   });
 
-  // 2) (placeholder) assistant response - AI team will replace this later
-  const assistantText =
-    "تم استلام سؤالك ✅ (الرد الذكي سيتم ربطه قريبًا). حاليا يمكنك استخدام قسم الإجراءات والنماذج من التطبيق.";
+  // 2) Smarter Placeholder assistant response
+  let assistantText = "تم استلام سؤالك ✅ (الرد الذكي سيتم ربطه قريبًا). حاليا يمكنك استخدام قسم الإجراءات والنماذج من التطبيق.";
+
+  // Quick check if the user is asking about a procedure (e.g., "كيف", "خطوات", "إجراءات")
+  const contentLower = data.content.toLowerCase();
+  if (contentLower.includes("كيف") || contentLower.includes("خطوات") || contentLower.includes("إجراءات") || contentLower.includes("procedure") || contentLower.includes("steps")) {
+    // Try to find a matching procedure to be "helpful"
+    const searchTerms = data.content.split(" ").filter(w => w.length > 3).slice(0, 3);
+    if (searchTerms.length > 0) {
+      const found = await Procedure.findOne({ 
+        $text: { $search: searchTerms.join(" ") },
+        isActive: true 
+      }).select("name summary steps fees");
+
+      if (found) {
+        assistantText = `بناءً على سؤالك، قد يهمك معرفة إجراءات: **${found.name}**\n\n${found.summary || ""}\n\n`;
+        if (found.steps && found.steps.length > 0) {
+          assistantText += "**الخطوات الأساسية:**\n" + found.steps.map(s => `- ${s.title}`).join("\n") + "\n\n";
+        }
+        if (found.fees && found.fees.amountEgp) {
+          assistantText += `**الرسوم التقريبية:** ${found.fees.amountEgp} جنيه مصري.`;
+        }
+        assistantText += "\n\nيمكنك العثور على التفاصيل الكاملة في قسم الإجراءات القانونية.";
+      }
+    }
+  }
 
   const assistantMsg = await ChatMessage.create({
     sessionId: session._id,

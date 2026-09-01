@@ -16,6 +16,8 @@ const lawyerSchema = new mongoose.Schema(
 
     specialties: [{ type: String }], // ["أحوال شخصية", "مدني", ...]
     pricePerSession: { type: Number, default: 0 },
+    sessionDurationMins: { type: Number, default: 30 },
+    communicationMethods: { type: String, default: "both" }, // "chat", "video_call", "both"
 
     ratingAvg: { type: Number, default: 0 }, // هنحسبها من reviews
     ratingCount: { type: Number, default: 0 },

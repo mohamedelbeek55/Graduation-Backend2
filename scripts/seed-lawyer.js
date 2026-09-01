@@ -7,16 +7,19 @@ async function main() {
   await connectDB();
 
   const email = "demo.lawyer@lexaguide.com";
+  const password = "Admin12345";
+  const passwordHash = await bcrypt.hash(password, 10);
+  
   const exists = await Lawyer.findOne({ email });
   if (exists) {
+    exists.passwordHash = passwordHash;
     exists.isVerified = true;
     exists.isActive = true;
     await exists.save();
-    console.log("✅ Lawyer verified/activated:", exists.email);
+    console.log("✅ Lawyer updated (password & status):", exists.email);
     process.exit(0);
   }
 
-  const passwordHash = await bcrypt.hash("Admin12345", 10);
   const lawyer = await Lawyer.create({
     fullName: "Demo Lawyer",
     email,

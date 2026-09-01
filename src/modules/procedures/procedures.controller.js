@@ -85,3 +85,70 @@ export const getProcedure = asyncHandler(async (req, res) => {
   if (!item) return res.status(404).json({ message: "Not found" });
   res.json({ procedure: item });
 });
+
+// Added for Procedures Page dynamic search
+export const searchProcedures = asyncHandler(async (req, res) => {
+  const { query } = req.query;
+  
+  if (!query) {
+    return res.json({ procedures: [] });
+  }
+
+  // ── Arabic Fuzzy Normalization ────────────────────────────────────────────
+  // Build multiple patterns to handle common Arabic spelling variants
+  function makeArabicVariants(str) {
+    const cleaned = str
+      .replace(/[\u064B-\u065F\u0670]/g, '') // remove tashkeel
+      .replace(/[أإآ]/g, 'ا')                // normalize alef variants
+      .replace(/ى/g, 'ي')                    // alef maqsura → ya
+      .trim();
+
+    const variants = new Set([str, cleaned]);
+
+    // Swap ONLY word-final ة ↔ ه (these are spelling variants of the same sound)
+    // Word-final means: followed by space, end of string, or punctuation
+    for (const v of [...variants]) {
+      // ة → ه at word end
+      variants.add(v.replace(/ة(?=\s|$)/g, 'ه'));
+      // ه → ة at word end (شهاده → شهادة)
+      variants.add(v.replace(/ه(?=\s|$)/g, 'ة'));
+    }
+
+    return [...variants];
+  }
+
+  const variants = makeArabicVariants(query);
+  const escapedVariants = variants.map(v => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const regex = new RegExp(escapedVariants.join('|'), 'i');
+
+  const items = await Procedure.find({
+    isActive: true,
+    $or: [{ title: regex }, { summary: regex }, { tags: regex }]
+  })
+  .sort({ createdAt: -1 })
+  .limit(30)
+  .lean();
+
+  // Transform to exactly match the Frontend standard Keys
+  const mapped = items.map(i => {
+    let type = "offline";
+    if (i.channels?.online && i.channels?.offline) type = "both";
+    else if (i.channels?.online) type = "online";
+    
+    return {
+      id: i._id,
+      name: i.title,
+      type: type,
+      description: i.summary || "No description provided.",
+      steps: i.steps || [],
+      required_documents: i.requiredDocuments || [],
+      fees: i.fees,
+      duration: i.eta,
+      location: i.locations || [],
+      link: i.links || []
+    };
+  });
+
+  res.json({ procedures: mapped });
+});
+

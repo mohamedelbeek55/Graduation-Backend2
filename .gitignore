@@ -18,7 +18,7 @@ pnpm-debug.log*
 # ========================
 # Logs
 # ========================
-logs
+logs/
 *.log
 
 # ========================
@@ -26,11 +26,16 @@ logs
 # ========================
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # ========================
-# VS Code
+# Editor / IDE
 # ========================
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
 
 # ========================
 # Build / Output
@@ -38,25 +43,33 @@ Thumbs.db
 dist/
 build/
 .vercel/
+.next/
+.out/
 
 # ========================
 # Uploaded / Local Data
 # ========================
 uploads/
 Data/
+local_data/
 
 # ========================
-# Zip files
-# ========================
-*.zip
-
-# ========================
-# Coverage
+# Coverage / Testing
 # ========================
 coverage/
+.nyc_output/
+htmlcov/
 
 # ========================
-# Misc
+# Archives / Zip / RAR
+# ========================
+*.zip
+*.rar
+*.7z
+*.tar.gz
+
+# ========================
+# Misc / Scratch
 # ========================
 *.tmp
 *.temp

@@ -1,6 +1,11 @@
 export function errorMiddleware(err, req, res, next) {
   if (err?.name === "ZodError") {
-    return res.status(400).json({ message: "Validation error", issues: err.issues });
+    const firstIssue = err.issues?.[0];
+    const message = firstIssue ? `${firstIssue.path.join('.')}: ${firstIssue.message}` : "Validation error";
+    return res.status(400).json({ 
+      message, 
+      issues: err.issues 
+    });
   }
 
   console.error("❌ Error:", err);

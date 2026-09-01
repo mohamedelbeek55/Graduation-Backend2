@@ -5,12 +5,14 @@ import {
   updateProcedure,
   deleteProcedure,
   listProcedures,
-  getProcedure
+  getProcedure,
+  searchProcedures
 } from "./procedures.controller.js";
 
 const router = Router();
 
 // For app/web (reads)
+router.get("/search", searchProcedures);
 router.get("/", listProcedures);
 router.get("/:id", getProcedure);
 

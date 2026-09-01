@@ -1,5 +1,14 @@
 import mongoose from "mongoose";
 
+const fieldSchema = new mongoose.Schema(
+  {
+    label: { type: String, required: true },
+    key: { type: String, required: true },
+    type: { type: String, default: "text" }
+  },
+  { _id: false }
+);
+
 const clauseSchema = new mongoose.Schema(
   {
     clauseTitle: { type: String, required: true },
@@ -15,7 +24,9 @@ const contractTemplateSchema = new mongoose.Schema(
     title: { type: String, required: true }, // اسم التمبليت
     type: { type: String, required: true },  // Contract_Type
     sourceFile: { type: String, default: "" },
-    clauses: [clauseSchema],
+    clauses: [clauseSchema], // Old style
+    content: { type: String }, // New style: Full template containing placeholders like {{name}}
+    fields: [fieldSchema],     // New style: Required dynamic inputs metadata
     tags: [{ type: String }],
     isActive: { type: Boolean, default: true }
   },
