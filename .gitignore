@@ -1,11 +1,29 @@
 # ========================
-# Node.js
+# Node.js (Backend)
 # ========================
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# ========================
+# Python (AI Recommendation Service - inside /ai-service)
+# ========================
+ai-service/.venv/
+ai-service/venv/
+**/ai-service/**/__pycache__/
+**/ai-service/**/*.py[cod]
+**/ai-service/**/*.pyo
+**/ai-service/**/*.pyd
+**/ai-service/**/.Python
+ai-service/pip-log.txt
+ai-service/pip-delete-this-directory.txt
+ai-service/*.egg-info/
+ai-service/.eggs/
+ai-service/dist/
+ai-service/build/
+ai-service/.pytest_cache/
 
 # ========================
 # Environment Variables
