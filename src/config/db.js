@@ -6,6 +6,7 @@ export async function connectDB() {
   if (!uri) throw new Error("Missing MONGODB_URI in .env");
 
   mongoose.set("strictQuery", true);
+  console.log("URI used:", process.env.MONGODB_URI);
   await mongoose.connect(uri);
   const isAtlas = /mongodb\.net/i.test(uri);
   console.log(isAtlas ? "✅ Atlas connected" : "✅ MongoDB connected");

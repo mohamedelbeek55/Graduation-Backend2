@@ -203,6 +203,20 @@ Graduation-Backend2/
 
 ---
 
+## 🧪 Demo / Test Accounts
+
+For quick evaluation without registering, the following demo accounts are already seeded in the live database. All data is fake and used for testing/demo purposes only — no real personal information.
+
+| Role   | Email                        | Password           |
+|--------|-------------------------------|---------------------|
+| Admin  | `admin.demo@lexaguide.com`   | `DemoAdmin#2025`    |
+| User   | `user.demo@lexaguide.com`    | `DemoUser#7391`     |
+| Lawyer | `lawyer.demo@lexaguide.com`  | `DemoLawyer#4820`   |
+
+> ⚠️ These are shared demo accounts for reviewers/testers — please don't change their passwords.
+
+---
+
 ## 🌐 Deployment (Vercel)
 
 The project is pre-configured for Vercel serverless deployment via `vercel.json`.
