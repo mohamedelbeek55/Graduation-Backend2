@@ -69,6 +69,13 @@ The server starts on **http://localhost:3000**
 | `CLOUDINARY_API_SECRET` | ✅ | Cloudinary API secret |
 | `FRONTEND_ORIGINS` | ✅ | Comma-separated allowed CORS origins |
 | `APP_ENV` | No | `development` or `production` |
+| `EMAIL_HOST` | ✅ | SMTP host (e.g. `smtp.gmail.com`) |
+| `EMAIL_PORT` | No (default: 587) | SMTP port |
+| `EMAIL_SECURE` | No (default: false) | `true` for port 465 |
+| `EMAIL_USER` | ✅ | SMTP username / sending address |
+| `EMAIL_PASS` | ✅ | SMTP password or App Password |
+| `EMAIL_FROM` | No | Display name + address for From header |
+| `GOOGLE_CLIENT_ID` | For Google auth | OAuth 2.0 Client ID from Google Cloud Console |
 
 ---
 
@@ -78,15 +85,22 @@ Base URL: `http://localhost:3000/api`
 
 ### 🔑 Auth
 ```
-POST   /api/auth/register        Register new user
-POST   /api/auth/login           Login → accessToken + refreshToken
-GET    /api/auth/me              Get current user (Bearer required)
-POST   /api/auth/refresh         Rotate refresh token
-POST   /api/auth/logout          Revoke current session
-POST   /api/auth/logout-all      Revoke all sessions
-POST   /api/auth/change-password Change password (Bearer required)
-POST   /api/auth/forgot-password Request password reset
-POST   /api/auth/reset-password  Complete password reset
+POST   /api/auth/register              Register new user — sends email verification OTP
+POST   /api/auth/login                 Login → accessToken + refreshToken
+GET    /api/auth/me                    Get current user (Bearer required)
+POST   /api/auth/refresh               Rotate refresh token
+POST   /api/auth/logout                Revoke current session
+POST   /api/auth/logout-all            Revoke all sessions
+POST   /api/auth/change-password       Change password (Bearer required)
+
+POST   /api/auth/send-verification-otp Resend email OTP (Bearer, rate-limited 3/min)
+POST   /api/auth/verify-email          Verify email { email, otp }
+
+POST   /api/auth/forgot-password       Request reset OTP { email } — always generic response
+POST   /api/auth/verify-reset-otp      Verify reset OTP { email, otp } → resetToken
+POST   /api/auth/reset-password        Set new password { resetToken, newPassword }
+
+POST   /api/auth/google                Google Sign-In { idToken } → accessToken
 ```
 
 ### 👤 Profile
@@ -165,9 +179,9 @@ GET    /api/admin/consultations              All consultations (Admin)
 Graduation-Backend2/
 ├── src/
 │   ├── config/           # DB + Cloudinary setup
-│   ├── middlewares/      # Auth, role guards, error handler, upload
+│   ├── middlewares/      # Auth, role guards, requireVerifiedEmail, error handler, upload
 │   ├── modules/          # Feature modules (auth, lawyers, consultations, ...)
-│   ├── utils/            # asyncHandler wrapper
+│   ├── utils/            # asyncHandler, email.js (Nodemailer), otp.js
 │   ├── app.js            # Express app, middleware stack, route mounting
 │   └── server.js         # Entry point + Vercel export
 ├── scripts/              # Seeding & data import utilities
