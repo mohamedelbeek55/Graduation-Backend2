@@ -54,7 +54,7 @@ src/
 │   ├── db.js                  # MongoDB connection (connectDB)
 │   └── cloudinary.js          # Cloudinary SDK initialization
 ├── middlewares/
-│   ├── auth.middleware.js      # JWT verification → sets req.user
+│   ├── auth.middleware.js      # JWT verification → sets req.user; requireRole(); requireVerifiedEmail()
 │   ├── admin.middleware.js     # requireRole("admin") guard
 │   ├── lawyerAuth.middleware.js# Lawyer/Admin role guard
 │   ├── error.middleware.js     # Global error handler (last middleware)
@@ -115,7 +115,9 @@ src/
 │       ├── contact.controller.js
 │       └── contact.routes.js
 ├── utils/
-│   └── asyncHandler.js            # try/catch wrapper for async controllers
+│   ├── asyncHandler.js            # try/catch wrapper for async controllers
+│   ├── email.js                   # Nodemailer wrapper + OTP email templates
+│   └── otp.js                     # OTP generation, bcrypt hashing, constants
 ├── app.js                         # Express setup, middleware stack, route mounting
 └── server.js                      # Entry point: connectDB + listen + Vercel export
 ```
@@ -140,6 +142,15 @@ SEED_ADMIN_EMAIL=admin@lexaguide.com
 SEED_ADMIN_PASSWORD=Admin12345
 FRONTEND_ORIGINS=http://localhost:5500,http://localhost:3000
 APP_ENV=development
+# Email (Nodemailer) — for OTP emails
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_SECURE=false
+EMAIL_USER=you@gmail.com
+EMAIL_PASS=your-app-password
+EMAIL_FROM="LexaGuide <you@gmail.com>"
+# Google OAuth — Client ID only (no secret needed for ID-token flow)
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 ```
 
 ---
@@ -151,15 +162,19 @@ APP_ENV=development
 ### Auth — `/api/auth`
 | Method | Path | Auth Required | Description |
 |---|---|---|---|
-| POST | `/register` | No | Register (fullName, email, password) |
+| POST | `/register` | No | Register (fullName, email, password) — sends verification OTP automatically |
 | POST | `/login` | No | Login → accessToken + refreshToken + user |
-| GET  | `/me` | Bearer | Current user info ⚠️ Must check BOTH collections |
+| GET  | `/me` | Bearer | Current user info (checks both User + Lawyer collections) |
 | POST | `/refresh` | No | Rotate refresh token |
 | POST | `/logout` | Bearer | Revoke current session |
 | POST | `/logout-all` | Bearer | Revoke all sessions |
 | POST | `/change-password` | Bearer | oldPassword + newPassword |
-| POST | `/forgot-password` | No | ⚠️ BUG: returns token in response (see Known Bugs) |
-| POST | `/reset-password` | No | resetToken + newPassword |
+| POST | `/send-verification-otp` | Bearer | Resend email verification OTP (rate-limited: 3/min per IP, 60s cooldown per user) |
+| POST | `/verify-email` | No | `{ email, otp }` — verify email address; locks after 5 failed attempts for 15 min |
+| POST | `/forgot-password` | No | `{ email }` — sends OTP to email; always returns generic response (rate-limited: 3/hr per IP) |
+| POST | `/verify-reset-otp` | No | `{ email, otp }` — verifies reset OTP; returns short-lived `resetToken` JWT on success |
+| POST | `/reset-password` | No | `{ resetToken, newPassword }` — resets password; invalidates all sessions |
+| POST | `/google` | No | `{ idToken }` — Google Sign-In (ID-token flow); links existing local accounts or creates new |
 
 ### Profile — `/api/profile`
 | Method | Path | Auth | Description |
@@ -246,12 +261,22 @@ APP_ENV=development
 users collection:
   fullName (string, required)
   email (string, unique, lowercase)
-  passwordHash (string, bcrypt)
+  passwordHash (string, bcrypt) — nullable for Google-only accounts
   role (enum: "user" | "admin", default: "user")
+  authProvider (enum: "local" | "google", default: "local")
+  googleId (string, sparse unique) — set for Google-linked accounts
   refreshTokens[] → { tokenHash, jti, createdAt, expiresAt, revokedAt, userAgent, ip }
   phone, bio, avatarUrl, avatarPublicId
   isActive (boolean, default: true)
-  passwordResetTokenHash, passwordResetExpiresAt
+  isEmailVerified (boolean, default: false) — true for Google accounts automatically
+  emailVerificationOTP (string, bcrypt hash) — cleared after verification
+  emailVerificationOTPExpires (Date)
+  emailVerificationOTPSentAt (Date) — used for 60s resend cooldown
+  otpAttempts (number) — failed verify attempts; resets on new OTP
+  otpLockedUntil (Date) — set for 15 min after 5 failed attempts
+  resetPasswordOTP (string, bcrypt hash) — cleared after use
+  resetPasswordOTPExpires (Date)
+  passwordResetTokenHash, passwordResetExpiresAt — legacy fields kept for compat
   timestamps
 ```
 
@@ -291,9 +316,9 @@ text, readAt, timestamps
 | # | Location | Issue | Fix |
 |---|---|---|---|
 | 1 | `lawyers.routes.js` | `/:id` defined BEFORE `/pending` → route shadowing | Move all literal routes ABOVE `/:id` |
-| 2 | `auth.controller.js → me()` | Only queries `User.findById()` — lawyers get `null` | Add `Lawyer.findById()` fallback |
+| 2 | `auth.controller.js → me()` | Only queries `User.findById()` — lawyers get `null` | ✅ Fixed — `me()` now checks both collections |
 | 3 | `consultations.routes.js` | No handler for `GET /:id` | Add `getConsultationById` controller |
-| 4 | `auth.controller.js → forgotPassword()` | Returns raw `resetToken` in JSON — critical security hole | Log only, or email the token |
+| 4 | `auth.controller.js → forgotPassword()` | ~~Returns raw `resetToken` in JSON~~ | ✅ Fixed — OTP-based flow, generic response, token never exposed |
 
 ---
 
@@ -342,5 +367,5 @@ text, readAt, timestamps
 
 ---
 
-**Last Updated**: 2026-09-03
+**Last Updated**: 2026-09-06
 **Scope**: Backend repo only (`Graduation-Backend2`)

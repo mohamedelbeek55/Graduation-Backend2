@@ -10,7 +10,7 @@ export async function requireAuth(req, res, next) {
 
   try {
     const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
-    
+
     // ✅ Verify account is still active and exists in DB
     let account;
     if (payload.role === "lawyer") {
@@ -61,7 +61,7 @@ export async function requireUserOrLawyer(req, res, next) {
 
   try {
     const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
-    
+
     let account;
     if (payload.role === "lawyer") {
       account = await Lawyer.findById(payload.sub);
@@ -88,4 +88,40 @@ export function requireRole(...roles) {
     if (!roles.includes(req.user.role)) return res.status(403).json({ message: "Forbidden" });
     return next();
   };
+}
+
+/**
+ * Blocks access for users whose email address has not been verified yet.
+ *
+ * Wire this AFTER requireAuth on any route that should be gated:
+ *   router.get("/sensitive", requireAuth, requireVerifiedEmail, handler)
+ *
+ * Lawyers are always treated as verified (their email is checked at admin
+ * approval time, and they don't go through our OTP flow).
+ * Google-authenticated users are also pre-verified by Google.
+ */
+export async function requireVerifiedEmail(req, res, next) {
+  // Lawyers bypass this check — they use a separate verification workflow
+  if (req.user?.role === "lawyer") return next();
+
+  try {
+    // Dynamically import here to avoid circular deps; User is only needed for this check
+    const { User } = await import("../modules/users/user.model.js");
+    const user = await User.findById(req.user.sub).select("isEmailVerified");
+
+    if (!user) {
+      return res.status(401).json({ message: "Account not found" });
+    }
+
+    if (!user.isEmailVerified) {
+      return res.status(403).json({
+        message: "Email not verified. Please verify your email before continuing.",
+        code: "EMAIL_NOT_VERIFIED"
+      });
+    }
+
+    return next();
+  } catch {
+    return res.status(500).json({ message: "Server error during email verification check" });
+  }
 }
