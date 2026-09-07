@@ -116,8 +116,9 @@ src/
 │       └── contact.routes.js
 ├── utils/
 │   ├── asyncHandler.js            # try/catch wrapper for async controllers
-│   ├── email.js                   # Nodemailer wrapper + OTP email templates
-│   └── otp.js                     # OTP generation, bcrypt hashing, constants
+│   ├── email.js                   # Nodemailer wrapper + OTP email templates (awaited — Vercel-safe)
+│   ├── otp.js                     # OTP generation, bcrypt hashing, constants
+│   └── password.js                # isStrongPassword() + PASSWORD_POLICY_MESSAGE (5-rule validation)
 ├── app.js                         # Express setup, middleware stack, route mounting
 └── server.js                      # Entry point: connectDB + listen + Vercel export
 ```
@@ -345,6 +346,9 @@ text, readAt, timestamps
 5. **Error Handling**: Throw descriptive `Error` objects — let `error.middleware.js` handle the response
 6. **Dual-Model Auth**: Any "current user" lookup MUST check both `User` and `Lawyer` collections
 7. **No Hardcoded IDs**: Never hardcode ObjectIds or env values directly in source code
+8. **Password Validation**: All endpoints that set a new password (`register`, `change-password`, `reset-password`) MUST use `isStrongPassword()` from `src/utils/password.js`. The `loginSchema` is the ONLY exception (accepts any non-empty string to support legacy passwords).
+9. **Email Sending**: All `sendXxxEmail()` calls MUST be `await`-ed (never fire-and-forget) — Vercel serverless kills the function before non-awaited promises resolve.
+10. **Secrets in Logs**: Never log `MONGODB_URI` or any credential in production. Guard all credential logs with `if (process.env.APP_ENV !== "production")`.
 
 ---
 
@@ -367,5 +371,15 @@ text, readAt, timestamps
 
 ---
 
-**Last Updated**: 2026-09-06
+## 🔧 Recent Changes & Fixes
+
+| Date | What Changed | File(s) |
+|---|---|---|
+| 2026-09-07 | OTP emails now `await`-ed — fixes intermittent delivery on Vercel serverless | `auth.controller.js` |
+| 2026-09-07 | Hide `MONGODB_URI` from logs in production | `config/db.js` |
+| 2026-09-07 | Strong password policy enforced on register, change-password, reset-password (min 8 chars + uppercase + lowercase + digit + special) | `auth.controller.js`, `utils/password.js` (new) |
+
+---
+
+**Last Updated**: 2026-09-07
 **Scope**: Backend repo only (`Graduation-Backend2`)
