@@ -8,6 +8,7 @@ import { User } from "../users/user.model.js";
 import { Lawyer } from "../lawyers/lawyer.model.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { sendVerificationOTPEmail, sendPasswordResetOTPEmail } from "../../utils/email.js";
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from "../../utils/password.js";
 import {
   generateOTP,
   hashOTP,
@@ -42,7 +43,10 @@ function getGoogleClient() {
 const registerSchema = z.object({
   fullName: z.string().min(2),
   email: z.string().email(),
-  password: z.string().min(6)
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters.")
+    .refine(isStrongPassword, { message: PASSWORD_POLICY_MESSAGE })
 });
 
 const loginSchema = z.object({
@@ -60,7 +64,10 @@ const logoutSchema = z.object({
 
 const changePasswordSchema = z.object({
   oldPassword: z.string().min(1),
-  newPassword: z.string().min(6)
+  newPassword: z
+    .string()
+    .min(8, "Password must be at least 8 characters.")
+    .refine(isStrongPassword, { message: PASSWORD_POLICY_MESSAGE })
 });
 
 const forgotSchema = z.object({
@@ -90,7 +97,10 @@ const verifyResetOTPSchema = z.object({
 
 const resetPasswordSchema = z.object({
   resetToken: z.string().min(10),
-  newPassword: z.string().min(6)
+  newPassword: z
+    .string()
+    .min(8, "Password must be at least 8 characters.")
+    .refine(isStrongPassword, { message: PASSWORD_POLICY_MESSAGE })
 });
 
 const googleAuthSchema = z.object({
