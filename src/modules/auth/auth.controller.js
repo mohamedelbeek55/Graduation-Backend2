@@ -132,10 +132,13 @@ export const register = asyncHandler(async (req, res) => {
     emailVerificationOTPSentAt: new Date()
   });
 
-  // Send OTP email (non-blocking — don't fail registration if email is down)
-  sendVerificationOTPEmail(data.email, otp, data.fullName).catch((err) =>
-    console.error("⚠️  Failed to send verification email:", err.message)
-  );
+  // Send OTP email — awaited so Vercel doesn't kill the function before delivery
+  try {
+    await sendVerificationOTPEmail(data.email, otp, data.fullName);
+  } catch (err) {
+    console.error("⚠️  Failed to send verification email:", err.message);
+    // Continue registration even if the email fails — user can resend later
+  }
 
   const accessToken = signAccessToken({ sub: user._id.toString(), role: user.role });
 
@@ -365,10 +368,13 @@ export const forgotPassword = asyncHandler(async (req, res) => {
   user.resetPasswordOTPExpires = otpExpiresAt();
   await user.save();
 
-  // Non-blocking — network failures should not expose whether email exists
-  sendPasswordResetOTPEmail(data.email, otp, user.fullName).catch((err) =>
-    console.error("⚠️  Failed to send reset OTP email:", err.message)
-  );
+  // Awaited so Vercel doesn't terminate the function before the email is delivered
+  try {
+    await sendPasswordResetOTPEmail(data.email, otp, user.fullName);
+  } catch (err) {
+    console.error("⚠️  Failed to send reset OTP email:", err.message);
+    // Still return genericOk — we don't want to reveal whether the email exists
+  }
 
   return genericOk();
 });
@@ -514,9 +520,13 @@ export const sendVerificationOTP = asyncHandler(async (req, res) => {
   user.otpLockedUntil = null;
   await user.save();
 
-  sendVerificationOTPEmail(user.email, otp, user.fullName).catch((err) =>
-    console.error("⚠️  Failed to send verification email:", err.message)
-  );
+  // Awaited so Vercel doesn't terminate the function before the email is delivered
+  try {
+    await sendVerificationOTPEmail(user.email, otp, user.fullName);
+  } catch (err) {
+    console.error("⚠️  Failed to send verification email:", err.message);
+    // Still respond with ok — the user can retry; DB already has the new OTP
+  }
 
   return res.json({ ok: true, message: "Verification code sent to your email." });
 });
